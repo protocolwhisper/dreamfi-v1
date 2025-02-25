@@ -3,8 +3,10 @@ blueprint: public(address)
 oracle: public(address)
 
 struct CollateralType: 
-    contract: address
+    contract: IERC20
     weight: uint256
+    percent_of_vault: uint8
+    decimals: uint8
 
 interface Pool: 
     def initialize(collateral_info: DynArray[CollateralType, 10]): nonpayable
