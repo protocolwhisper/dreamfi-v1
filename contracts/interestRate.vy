@@ -36,22 +36,24 @@ def utilizationRate(total_borrowed:uint256 , total_liquidity:uint256) -> uint256
 @external
 @view
 
-def calculateBorrowInterest(total_borrowed:uint256 , total_liquidity: uint256) -> uint256:
+def calculateBorrowInterest(total_borrowed: uint256, total_liquidity: uint256) -> uint256:
     """
-    Calculate the supply intetest rate based on utilization
+    Calculate the borrow interest rate based on utilization.
     """
     if total_liquidity == 0:
         return 0
 
-    utilization_rate: uint256 = self.utilizationRate(total_borrowed , total_liquidity)
-    
-    if utilization_rate > OPTIMAL_UTILIZATION:
+    utilization_rate: uint256 = self.utilizationRate(total_borrowed, total_liquidity)
+    print(utilization_rate)
+
+    if utilization_rate <= OPTIMAL_UTILIZATION:
         utilization_mistmatch: uint256 = rayMath.rayDiv(utilization_rate, OPTIMAL_UTILIZATION)
         borrow_rate: uint256 = BASE_RATE + rayMath.rayMul(utilization_mistmatch, SLOPE1)
         return borrow_rate
-    else :
-        error_factor:uint256 = rayMath.rayDiv(utilization_rate - OPTIMAL_UTILIZATION, RAY - OPTIMAL_UTILIZATION)
-        borrow_rate: uint256 = BASE_RATE + SLOPE1 + rayMath.rayMul(error_factor, SLOPE2)
+    else:
+        over_utilization: uint256 = utilization_rate - OPTIMAL_UTILIZATION
+        error_factor: uint256 = rayMath.rayDiv(over_utilization, RAY - OPTIMAL_UTILIZATION)
+        borrow_rate: uint256 = BASE_RATE + SLOPE1 + rayMath.rayMul(rayMath.rayDiv(over_utilization, RAY - OPTIMAL_UTILIZATION), SLOPE2)
         return borrow_rate
 
 @external
