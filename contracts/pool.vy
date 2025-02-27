@@ -13,12 +13,11 @@ struct CollateralPosition:
 
 struct Collateral:
     amount: uint256
-    weight: uint256 # ratio of collateral to maintain in the pool.
+    weight: uint256 # ratio of collateral to maintain in the pool
 
 struct Holder:
     collateral: HashMap[address, uint256]
     cdpBorrowed: uint256
-    cdpMaxBorrow: uint256
 
 cdp_contract: address # the CDP token addr
 holders: HashMap[address, Holder] # maps user -> UserPosition
@@ -46,13 +45,13 @@ Returns number of tokens minted for the user.
 '''
 @payable
 @external
-def deposit(fund: Fund) -> uint256:
-    assert fund.contract._is_contract
-    assert fund.amount > 0
+def deposit(contract: address, amount: uint256) -> uint256:
+    assert contract._is_contract
+    assert amount > 0
 
     # Update the holder's collateral amount.
     holder = self.holders[msg.sender]
-    holder.collateral[fund.address] += fund.amount
+    holder.collateral[contract] += fund.amount
     self.holders[msg.sender] = holder
     
     oldTotal: uint256 = 0
@@ -66,10 +65,9 @@ def deposit(fund: Fund) -> uint256:
         oldTotal += collateralPrice * self.collateral[addr].amount
         holderValue += collateralPrice * holder.collateral[addr]
 
-        # Update the pool's 
-        if addr == fund.address:
-            addedValue = collateralPrice * fund.amount
-            self.collateral[addr].amount += fund.amount
+        if addr == amount:
+            addedValue = collateralPrice * amount
+            self.collateral[addr].amount += amount
 
     # Compute how many new tokens to mint (give to self:address) given the deposit.
     cdp: IERC20 = IERC20(self.cdp_contract)
@@ -79,12 +77,13 @@ def deposit(fund: Fund) -> uint256:
 
     # TODO cdp.mint(newTokens)
     cdpSupply += newTokens
+    cdpPrice = newTotal / cdpSupply
 
-    # Return the amount of newly minted tokens that the holder can now borrow
+    # Return the new amount of cdp tokens that the caller can now borrow.
     maxBorrowValue: uint256 = (holderValue * BORROW_RATIO) / 100
-    maxBorrowCdp: uint256 = (maxBorrowValue * cdpSupply) / newTotal
-    assert maxBorrowCdp >= holder.cdpBorrowed
-    return maxBorrowCdp - holder.cdpBorrowed
+    curBorrowValue: uint256 = holder.cdpBorrowed * cdpPrice
+    cdpBorrowMax: uint256 = ((maxBorrowValue - curBorrowValue) * newTotal) / cdpSupply
+    return cdpBorrowMax
 
 @external
 def withdraw(fund: Fund) -> uint256:
