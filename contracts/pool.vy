@@ -18,6 +18,7 @@ struct Collateral:
 struct Holder:
     collateral: HashMap[address, uint256]
     cdpBorrowed: uint256
+    cdpMaxBorrow: uint256
 
 cdp_contract: address # the CDP token addr
 holders: HashMap[address, Holder] # maps user -> UserPosition
@@ -39,14 +40,17 @@ def __init__(cdp_contract: address, positions: DynArray[CollateralPosition, MAX_
     assert weightSum == 100 ** SCALE, "Pool position weights do not sum to 100 units"
     self.cdp_contract = cdp_contract
 
-# Deposits amounts of each token contract from the user into the pool's CDP.
-# Returns number of tokens minted for the user
+'''
+Deposits amounts of each token contract from the user into the pool's CDP.
+Returns number of tokens minted for the user.
+'''
 @payable
 @external
 def deposit(fund: Fund) -> uint256:
     assert fund.contract._is_contract
     assert fund.amount > 0
 
+    # Update the holder's collateral amount.
     holder = self.holders[msg.sender]
     holder.collateral[fund.address] += fund.amount
     self.holders[msg.sender] = holder
@@ -55,17 +59,19 @@ def deposit(fund: Fund) -> uint256:
     addedValue: uint256 = 0
     holderValue: uint256 = 0
 
+    # Iterate all assets and compute their price in SCALE units.
+    # Accumulating the total price of all assets as well as the total price of the holder's assets.
     for addr: address in self.contracts:
-        collateral: Collateral = self.collateral[addr]
         collateralPrice = getPrice(addr)
-
-        oldTotal += collateralPrice * collateral.amount
+        oldTotal += collateralPrice * self.collateral[addr].amount
         holderValue += collateralPrice * holder.collateral[addr]
 
+        # Update the pool's 
         if addr == fund.address:
             addedValue = collateralPrice * fund.amount
-            self.collateral[addr] = collateral.amount + fund.amount
+            self.collateral[addr].amount += fund.amount
 
+    # Compute how many new tokens to mint (give to self:address) given the deposit.
     cdp: IERC20 = IERC20(self.cdp_contract)
     cdpSupply: uint256 = cdp.totalSupply()
     newTotal: uint256 = oldTotal + addedValue
@@ -81,15 +87,20 @@ def deposit(fund: Fund) -> uint256:
     return maxBorrowCdp - holder.cdpBorrowed
 
 @external
-def withdraw(fund: Fund):
+def withdraw(fund: Fund) -> uint256:
+    # TODO
+    return 0
+
+'''
+Creates a debt against the total collateral deposited by the caller, 
+giving them cdp currency in exchange.
+'''
+@external
+def borrow(cdpAmount: uint256) -> uint256:
     pass
 
 @external
-def borrow():
-    pass
-
-@external
-def repay():
+def repay(cdpAmount: uint256) -> uint256:
     pass
 
 '''
