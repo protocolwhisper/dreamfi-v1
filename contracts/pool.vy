@@ -94,10 +94,6 @@ def withdraw(fund: Fund) -> uint256:
 Creates a debt against the total collateral deposited by the caller, 
 giving them cdp currency in exchange.
 '''
-@external
-def borrow(cdpAmount: uint256) -> uint256:
-    pass
-
 def borrow(units_borrowed: uint256):
     collateralValue: uint256 = 0
     holderValue: uint256 = 0 
