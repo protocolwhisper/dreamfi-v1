@@ -9,7 +9,7 @@ BORROW_RATIO: constant(uint256) = 80 # N / 100
 
 struct CollateralPosition:
     contract: address
-    weight: uint256 # ratio of collateral to maintain the pool.
+    weight: uint256 # ratio of collateral to maintain the vault.
 
 struct Collateral:
     amount: uint256
@@ -98,8 +98,28 @@ giving them cdp currency in exchange.
 def borrow(cdpAmount: uint256) -> uint256:
     pass
 
+def borrow(units_borrowed: uint256):
+    collateralValue: uint256 = 0
+    holderValue: uint256 = 0 
+    for c in self.contracts:  
+        collateralPrice = getPrice(c)
+        collateralValue += collateralPrice * self.collateral[c].amount
+        holderValue += collateralPrice * holders.collateral[addr].amount
+
+     price: uint256 = collateralValue / IERC20(cdp_contract).totalSupply()
+
+     total_value_borrow_attempt: uint256 = units_borrowed * price 
+     maximum: uint256 = holderValue * BORROW_RATIO/100
+     assert total_value_borrow_attempt <= maximum, "Rekt"
+     # update user borrow information
+     self.holders[msg.sender].cdpBorrowed += units_borrowed
+     # transfer cdp from vault to user 
+     IERC20(self.cdp_contract).transfer(msg.sender, units_borrowed)
+
 @external
-def repay(cdpAmount: uint256) -> uint256:
+def repay():
+    # reduce the borrowed amount by total repayed CDP units
+    # transfer CDP to vault
     pass
 
 '''
