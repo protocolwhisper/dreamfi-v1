@@ -12,18 +12,30 @@ interface AggregatorV3Interface:
     def latestRoundData() -> (uint80, int256, uint256, uint256, uint80): view
     def version() -> uint256: view
 
+DECIMALS: constant(uint8) = 18
+SCALE: constant(uint256) = 10 ** DECIMALS
+
+struct Fund:
+    contract: address
+    amount: uint256
+
 # https://docs.chain.link/data-feeds/price-feeds/addresses?network=ethereum&page=1
 @external
 @view
-def getPrice(contract: address) -> int256:
-    feed: AggregatorV3Interface = AggregatorV3Interface(contract)
-
+def getPrice(contract: address) -> uint256:
+    feed: AggregatorV3Interface = AggregatorV3Interface(fund.contract)
+    
+    # Get the price from ChainLink
     roundId: uint80 = 0
-    answer: int256 = 0
+    price: int256 = 0
     startedAt: uint256 = 0
     updatedAt: uint256 = 0
     answeredInRound_Deprecated: uint80 = 0
-    (roundId, answer, startedAt, updatedAt, answeredInRound_Deprecated) = extcall feed.latestRoundData()
+    (roundId, price, startedAt, updatedAt, answeredInRound_Deprecated) = feed.latestRoundData()
     
-    # TODO: use feed.decimals() to convert answer to fixed unit.
-    return answer
+    # Convert price to unit by adjusting decimal
+    priceDecimals: uint8 = feed.decimals()
+    if priceDecimals > DECIMALS:
+        return price / pow_mod256(10, priceDecimals - DECIMALS)
+    else:
+        return price * pow_mod256(10, DECIMALS - priceDecimals)
