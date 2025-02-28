@@ -89,7 +89,7 @@ Moves ${amount} from the vaults's ${asset} account to user's ${asset} account (r
 Fails either if:
 - user never deposit ${amount} of ${asset}.
 - it would bring their deposited value bellow the borrowed CDP value.
-On success, burns an equivalent amount of CDP from the user.
+On success, burns an equivalent amount of CDP from the vault.
 '''
 @external
 def withdraw(asset: address, amount: uint256) -> uint256:
