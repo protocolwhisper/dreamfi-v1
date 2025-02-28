@@ -139,25 +139,25 @@ def withdraw(asset: address, amount: uint256) -> uint256:
     user_cdp: uint256 = self.cdpBorrowed[user_address]
 
     
-    user_collateral: uint256 = self.userCollateral[(user_address, asset)]
+    user_collateral: uint256 = self.userCollateral[(user_address, asset)] #amount of asset per user
     assert user_collateral >= amount, "Insufficient collateral"
     
 
-    # I don't get how is when theres two tokens in the game
-    asset_price: uint256 = getPrice(asset)
-    cdp_to_burn: uint256 = amount * asset_price #This is in usdc
+    asset_price: uint256 = getPrice(asset) #Asset price in usdc
+    cdp_to_burn: uint256 = amount * asset_price # amount in usdc
     cdp_price: uint256 = self.cdpPrice(self.getPriceInfo()) #Price of cdp in usdc
 
-    amount_burn: uint256 = cdp_to_burn / cdp_price
+    amount_burn: uint256 = cdp_to_burn // cdp_price
+
 
     # Update state and perform transfers
     self.poolCollateral[asset] -= amount
     self.userCollateral[(user_address, asset)] -= amount
     
     # Transfer
-    assert IERC20(asset).transfer(user_address, amount)
-    #Burning
-    assert IERC20(self.cdpAsset).burn(amount_burn), "CDP burn failed"
+    extcall IERC20(asset).transfer(user_address, amount) #Transfer collateral to user
+    
+    extcall IERC20(self.cdpAsset).burn(amount_burn) #Burning cdp from vault
     
     return amount
 
