@@ -1,9 +1,11 @@
 import boa
+boa.set_network_env('https://rpc.ankr.com/eth_sepolia')
 
-interest = boa.load("interestRate.vy")
+c = boa.load(
+    "oracle.vy",)
 
 
-    
-borrow_interest = interest.calculateBorrowInterest(500, 1000)
+x = c.getTokenPrice('0x5fb1616F78dA7aFC9FF79e0371741a747D2a7F22')
 
-print(f"Borrow Interest Rate: {(borrow_interest / 10**27) * 100}%")
+print(x)
+
