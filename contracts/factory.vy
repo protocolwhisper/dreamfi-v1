@@ -28,5 +28,5 @@ def new_pool(collateral_assets: DynArray[address, MAX_POSITIONS], name: String[2
     liquidate_beneficiary: address = self.admin
     cdp_addr: address = create_from_blueprint(TOKEN_BLUEPRINT, name, symbol, DECIMALS, domain_712, version_712)
     pool_addr: address = create_from_blueprint(POOL_BLUEPRINT, cdp_addr, liquidate_beneficiary, collateral_assets, revert_on_failure=True, value=0)
-    log NewPool(pool_contract=pool_addr, cdp_contract=cdp_addr)
+    log NewPool(pool_addr, cdp_addr)
     return (pool_addr, cdp_addr)
