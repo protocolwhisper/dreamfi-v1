@@ -3,17 +3,18 @@
 import currency
 from ethereum.ercs import IERC20
 
-MAX_POSITIONS: constant(uint8) = 10
+MAX_POSITIONS: public(constant(uint8)) = 10
+
 BORROW_RATIO: constant(uint256) = 80 # N / 100
 LIQUIDATE_INCENTIVE_RATIO: constant(uint256) = 5 # N / 100
 
-cdpAsset: immutable(address)
-liquidateBeneficiary: immutable(address)
-assets: immutable(DynArray[address, MAX_POSITIONS])
+cdpAsset: address
+liquidateBeneficiary: address
+assets: DynArray[address, MAX_POSITIONS]
 
 cdpBorrowed: HashMap[address, uint256] # user => amount of cdp borrowed by user
 poolCollateral: HashMap[address, uint256] # asset => amount of asset for entire pool
-userCollateral: public(HashMap[address, HashMap[address, amount]]) # user => (asset => amount owned by user)
+userCollateral: public(HashMap[address, HashMap[address, uint256]]) # user => (asset => amount owned by user)
 
 '''
 Takes in array of (AssetAddress, AssetWeight) for the pool composition.
@@ -23,12 +24,12 @@ The sum of AssetWeight must equal 100 * currency.SCALE
 def __init__(
     cdp_asset: address, # the asset address of the CDP token
     liquidate_beneficiary: address, # where protocol-benefitting liquidated assets are sent.
-    assets: DynArray[address, MAX_POSITIONS], # list of asset addresses for this pool
+    asset_positions: DynArray[address, MAX_POSITIONS], # list of asset addresses for this pool
 ):
     assert cdp_asset._is_contract
-    assert len(assets) > 0
+    assert len(asset_positions) > 0
 
-    self.assets = assets
+    self.assets = asset_positions
     self.cdpAsset = cdp_asset
     self.liquidateBeneficiary = liquidate_beneficiary
 
@@ -42,13 +43,13 @@ struct PriceInfo:
 @internal
 def getPriceInfo(user: address) -> PriceInfo:
     info: PriceInfo = empty(PriceInfo)
-    for asset in self.assets:
+    for asset: uint256 in self.assets:
         price: uint256 = currency.getPrice(asset)
         info.poolCollateral += price * self.poolCollateral[asset]
         info.userCollateral += price * self.userCollateral[user][asset]
 
     info.cdpBorrowed = self.cdpBorrowed[user]
-    info.cdpSupply = extcall IERC20(self.cdpAsset).totalSupply()
+    info.cdpSupply = IERC20(self.cdpAsset).totalSupply()
     return info
 
 @pure
@@ -162,6 +163,10 @@ def withdraw(asset: address, amount: uint256) -> uint256:
     
     return amount
 
+struct Fund:
+    asset: address
+    amount: uint256
+
 '''
 Attempts to liquidate the passed in user's deposited collateral.
 Otherwise it burns ${user's borrowed CDP} worth of caller's CDP to the vault
@@ -172,7 +177,7 @@ Then:
 Returns (asset, amount) collateral deposited from the user that was rewarded to the caller/liquidator.
 '''
 @external
-def liquidate(user: address) -> DynArray[(address, uint256), MAX_POSITIONS]:
+def liquidate(user: address) -> DynArray[Fund, MAX_POSITIONS]:
     assert user != empty(address), "Invalid target address for liquidation"
 
     userInfo: PriceInfo = getPriceInfo(user)
@@ -205,8 +210,8 @@ def liquidate(user: address) -> DynArray[(address, uint256), MAX_POSITIONS]:
             collateral -= move
             liquidatorReceiveCollateral -= move
             amount: uint256 = move // price
-            liquidated.append((asset, amount))
-            extcall IERC20(asset).transferFrom(self, liquidator,amount)
+            liquidated.append(Fund(asset=asset, amount=amount))
+            extcall IERC20(asset).transferFrom(self, liquidator, amount)
 
         # Then reward the beneficiary if there's any left over.
         move = min(collateral, beneficiaryReceiveCollateral)
