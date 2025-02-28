@@ -16,10 +16,8 @@ cdpBorrowed: HashMap[address, uint256] # user => amount of cdp borrowed by user
 poolCollateral: HashMap[address, uint256] # asset => amount of asset for entire pool
 userCollateral: public(HashMap[address, HashMap[address, uint256]]) # user => (asset => amount owned by user)
 
-'''
-Takes in array of (AssetAddress, AssetWeight) for the pool composition.
-The sum of AssetWeight must equal 100 * currency.SCALE
-'''
+# Takes in array of (AssetAddress, AssetWeight) for the pool composition.
+# The sum of AssetWeight must equal 100 * currency.SCALE
 @deploy
 def __init__(
     cdp_asset: address, # the asset address of the CDP token
@@ -63,10 +61,8 @@ def cdpBorrowMax(info: PriceInfo) -> uint256:
     collateralBorrowMax: uint256 = (info.userCollateral * BORROW_RATIO) // 100
     return (collateralBorrowMax * info.cdpSupply) // info.poolCollateral
 
-'''
-Moves ${amount} from the user's ${asset} account to vault's ${asset} account (creating collateral).
-Also mints new CDP to the vault's proportional to the asset amount value.
-'''
+# Moves ${amount} from the user's ${asset} account to vault's ${asset} account (creating collateral).
+# Also mints new CDP to the vault's proportional to the asset amount value.
 @external
 def deposit(asset: address, amount: uint256):
     assert asset._is_contract, "Asset must be a contract"
@@ -89,10 +85,8 @@ def deposit(asset: address, amount: uint256):
     extcall IERC20(asset).transfer(self, amount) # user -> vault (asset)
     # TODO: IERC20(self.cdpAsset).mint(self, newTokens)
 
-'''
-Moves ${cdpAmount} from the vault to the user, increasing their debt.
-They must never borrow more than BORROW_RATIO of their deposited collateral.
-'''
+# Moves ${cdpAmount} from the vault to the user, increasing their debt.
+# They must never borrow more than BORROW_RATIO of their deposited collateral.
 @external
 def borrow(cdpAmount: uint256):
     assert cdpAmount > 0, "Borrow would be a no-op"
@@ -107,9 +101,7 @@ def borrow(cdpAmount: uint256):
     self.cdpBorrowed[user] += cdpAmount
     extcall IERC20(self.cdpAsset).transferFrom(self, user, cdpAmount) # vault -> User (CDP)
 
-'''
-Moves ${cdpAmount} from the user to the vault, decreasing their debt.
-'''
+# Moves ${cdpAmount} from the user to the vault, decreasing their debt.
 @external
 def repay(cdpAmount: uint256):
     assert cdpAmount > 0, "Repay would be a no-op"
@@ -121,13 +113,11 @@ def repay(cdpAmount: uint256):
     self.cdpBorrowed[user] -= cdpAmount
     extcall IERC20(self.cdpAsset).transferFrom(user, self, cdpAmount) # User/caller -> vault (CDP)
 
-'''
-Moves ${amount} from the vaults's ${asset} account to user's ${asset} account (removing collateral).
-Fails either if:
-- user never deposit ${amount} of ${asset}.
-- it would bring their deposited value bellow the borrowed CDP value.
-On success, burns an equivalent amount of CDP from the vault.
-'''
+# Moves ${amount} from the vaults's ${asset} account to user's ${asset} account (removing collateral).
+# Fails either if:
+# - user never deposit ${amount} of ${asset}.
+# - it would bring their deposited value bellow the borrowed CDP value.
+# On success, burns an equivalent amount of CDP from the vault.
 @external
 def withdraw(asset: address, amount: uint256) -> uint256:
     #Check user health factor
@@ -167,15 +157,13 @@ struct Fund:
     asset: address
     amount: uint256
 
-'''
-Attempts to liquidate the passed in user's deposited collateral.
-Otherwise it burns ${user's borrowed CDP} worth of caller's CDP to the vault
-Then:
-- Move ${user's borrowed CDP} worth of their collateral from vault to caller (burning caller's CDP).
-- Move LIQUIDATE_INCENTIVE_RATIO of user's collateral from vault to caller.
-- Move remaining of user's collateral from vault to liquidateBeneficiary account.
-Returns (asset, amount) collateral deposited from the user that was rewarded to the caller/liquidator.
-'''
+# Attempts to liquidate the passed in user's deposited collateral.
+# Otherwise it burns ${user's borrowed CDP} worth of caller's CDP to the vault
+# Then:
+# - Move ${user's borrowed CDP} worth of their collateral from vault to caller (burning caller's CDP).
+# - Move LIQUIDATE_INCENTIVE_RATIO of user's collateral from vault to caller.
+# - Move remaining of user's collateral from vault to liquidateBeneficiary account.
+# Returns (asset, amount) collateral deposited from the user that was rewarded to the caller/liquidator.
 @external
 def liquidate(user: address) -> DynArray[Fund, MAX_POSITIONS]:
     assert user != empty(address), "Invalid target address for liquidation"
