@@ -15,7 +15,7 @@ DECIMALS: public(constant(uint256)) = 18
 SCALE: public(constant(uint256)) = 10 ** DECIMALS
 
 # https://docs.chain.link/data-feeds/price-feeds/addresses?network=ethereum&page=1
-@external
+
 @view
 def getPrice(contract: address) -> uint256:
     feed: AggregatorV3Interface = AggregatorV3Interface(contract)
