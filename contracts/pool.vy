@@ -1,7 +1,7 @@
 #pragma version >=0.3.0
 
 import currency
-from ethereum.ercs import IERC20
+import IERC20
 
 MAX_POSITIONS: public(constant(uint8)) = 10
 
