@@ -69,8 +69,9 @@ Also mints new CDP to the vault's proportional to the asset amount value.
 '''
 @external
 def deposit(asset: address, amount: uint256):
-    assert asset._is_contract
-    assert amount > 0
+    assert asset._is_contract, "Asset must be a contract"
+    assert asset != empty(address), "Asset must be valid"
+    assert amount > 0, "Deposit would be a no-op"
 
     info: PriceInfo = getPriceInfo()
     
@@ -93,7 +94,17 @@ They must never borrow more than BORROW_RATIO of their deposited collateral.
 '''
 @external
 def borrow(cdpAmount: uint256):
-    return 0 # TODO
+    assert cdpAmount > 0, "Borrow would be a no-op"
+
+    info: PriceInfo = getPriceInfo()
+    if info.cdpBorrowed < cdpBorrowMax(info):
+        return # User/caller is available to be liquidated.
+
+    cdpBorrowable: uint256 = cdpBorrowMax(info) - info.cdpBorrowed
+    assert cdpAmount <= cdpBorrowable, "Attempt to borrow more CDP than collateral allows"
+    
+    self.cdpBorrowed[msg.sender] += cdpAmount
+    extcall IERC20(self.cdpAsset).transferFrom(self, msg.sender, cdpAmount) # vault -> User/caller (CDP)
 
 '''
 Moves ${cdpAmount} from the user to the vault, decreasing their debt.
