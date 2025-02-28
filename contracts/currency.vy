@@ -11,8 +11,8 @@ interface AggregatorV3Interface:
     def latestRoundData() -> (uint80, int256, uint256, uint256, uint80): view
     def version() -> uint256: view
 
-DECIMALS: constant(uint256) = 18
-SCALE: constant(uint256) = 10 ** DECIMALS
+DECIMALS: public(constant(uint256)) = 18
+SCALE: public(constant(uint256)) = 10 ** DECIMALS
 
 # https://docs.chain.link/data-feeds/price-feeds/addresses?network=ethereum&page=1
 @external

@@ -1,5 +1,6 @@
 #pragma version >=0.3.0
 
+import pool as Pool
 from pool import MAX_POSITIONS
 from currency import DECIMALS
 
@@ -8,12 +9,12 @@ pool_blueprint: immutable(address)
 admin: address
 
 @deploy
-def __init__(admin: address, pool_contract: address, token_contract: address):
+def __init__(admin: address, pool_blueprint: address, token_blueprint: address):
     assert admin != empty(address)
 
     self.admin = admin
-    self.pool_blueprint = pool_contract 
-    self.token_blueprint = token_contract
+    self.pool_blueprint = pool_blueprint
+    self.token_blueprint = token_blueprint
 
 event NewPool:
     pool_contract: uint256

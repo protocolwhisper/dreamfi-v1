@@ -1,8 +1,7 @@
 #pragma version >=0.3.0
 
-from currency import SCALE
-from current import getPrice
-from snekmate import IERC20
+import currency
+from ethereum.ercs import IERC20
 
 MAX_POSITIONS: constant(uint8) = 10
 BORROW_RATIO: constant(uint256) = 80 # N / 100
@@ -14,7 +13,7 @@ assets: immutable(DynArray[address, MAX_POSITIONS])
 
 cdpBorrowed: HashMap[address, uint256] # user => amount of cdp borrowed by user
 poolCollateral: HashMap[address, uint256] # asset => amount of asset for entire pool
-userCollateral: public(HashMap[(address, address), uint256]) # (user, asset) => amount of asset for user
+userCollateral: public(HashMap[address, HashMap[address, amount]]) # user => (asset => amount owned by user)
 
 '''
 Takes in array of (AssetAddress, AssetWeight) for the pool composition.
@@ -43,10 +42,10 @@ struct PriceInfo:
 @internal
 def getPriceInfo(user: address) -> PriceInfo:
     info: PriceInfo = empty(PriceInfo)
-    for asset: address in self.assets:
-        price: uint256 = getPrice(asset)
+    for asset in self.assets:
+        price: uint256 = currency.getPrice(asset)
         info.poolCollateral += price * self.poolCollateral[asset]
-        info.userCollateral += price * self.userCollateral[(user, asset)]
+        info.userCollateral += price * self.userCollateral[user][asset]
 
     info.cdpBorrowed = self.cdpBorrowed[user]
     info.cdpSupply = extcall IERC20(self.cdpAsset).totalSupply()
@@ -81,11 +80,11 @@ def deposit(asset: address, amount: uint256):
     if info.cdpSupply == 0:
         newTokens = 1_000_000 # arbitrary starting tokens minted
     else:
-        newPoolCollateral: uint256 = info.poolCollateral + (getPrice(asset) * amount)
+        newPoolCollateral: uint256 = info.poolCollateral + (currency.getPrice(asset) * amount)
         newTokens = (newPoolCollateral * info.cdpSupply) // info.poolCollateral
 
     self.poolCollateral[asset] += amount
-    self.userCollateral[(userr, asset)] += amount
+    self.userCollateral[user][asset] += amount
     extcall IERC20(asset).transfer(self, amount) # user -> vault (asset)
     # TODO: IERC20(self.cdpAsset).mint(self, newTokens)
 
@@ -141,11 +140,11 @@ def withdraw(asset: address, amount: uint256) -> uint256:
     user_cdp: uint256 = self.cdpBorrowed[user_address]
 
     
-    user_collateral: uint256 = self.userCollateral[(user_address, asset)] #amount of asset per user
+    user_collateral: uint256 = self.userCollateral[user_adddress][asset] #amount of asset per user
     assert user_collateral >= amount, "Insufficient collateral"
     
 
-    asset_price: uint256 = getPrice(asset) #Asset price in usdc
+    asset_price: uint256 = currency.getPrice(asset) #Asset price in usdc
     cdp_to_burn: uint256 = amount * asset_price # amount in usdc
     cdp_price: uint256 = self.cdpPrice(self.getPriceInfo()) #Price of cdp in usdc 
 
@@ -154,7 +153,7 @@ def withdraw(asset: address, amount: uint256) -> uint256:
 
     # Update state and perform transfers
     self.poolCollateral[asset] -= amount
-    self.userCollateral[(user_address, asset)] -= amount
+    self.userCollateral[user_adddress][asset] -= amount
     
     # Transfer
     extcall IERC20(asset).transfer(user_address, amount) #Transfer collateral to user
@@ -198,7 +197,7 @@ def liquidate(user: address) -> DynArray[(address, uint256), MAX_POSITIONS]:
     liquidated: DynArray[(address, uint256), MAX_POSITIONS] = []
     for asset: address in self.assets:
         price: uint256 = getPrice(asset)
-        collateral: uint256 = price * self.userCollateral[(user, asset)]
+        collateral: uint256 = price * self.userCollateral[user][asset]
 
         # From the user's collateral on this asset, reward the liquidator frist.
         move: uint256 = min(collateral, liquidatorReceiveCollateral)
