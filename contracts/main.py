@@ -1,17 +1,69 @@
 import boa
+from eth_account import Account
+import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+# Setup network
 boa.set_network_env('https://rpc.ankr.com/eth_sepolia')
 
-#c = boa.load(
- #   "oracle.vy",)
-##
-import boa
-s = boa.load_partial("pool.vy")
-blueprint = s.deploy_as_blueprint()
-deployer = boa.load("factory.vy", blueprint)
-token = s.at(deployer.create_new_pool([0x5fb1616F78dA7aFC9FF79e0371741a747D2a7F22], "BTC50/ETH50", "B5E")) #FAKE ASSET
-get_address = token.get_address()
+# Get private keys and API key from environment variables
+PRIVATE_KEY = os.getenv('PRIVATE_KEY')
+ETHERSCAN_API_KEY = os.getenv('ETHERSCAN_API_KEY')
 
-#x = c.getTokenPrice('0x5fb
+def deploy_and_verify():
+    # Create account from private key
+    account = Account.from_key(PRIVATE_KEY)
+    
+    # Deploy blueprints
+    pool_blueprint = boa.load_partial("pool.vy")
+    token_blueprint = boa.load_partial("token.vy")  # Your CDP token contract
+    
+    pool_blueprint_contract = pool_blueprint.deploy_as_blueprint()
+    token_blueprint_contract = token_blueprint.deploy_as_blueprint()
+    
+    # Deploy factory
+    factory = boa.load("factory.vy", 
+        account.address,  # admin
+        pool_blueprint_contract.address, 
+        token_blueprint_contract.address
+    )
+    
+    # Verify contracts on Etherscan
+    try:
+        boa.verify_source(
+            pool_blueprint_contract.address,
+            "pool.vy",
+            ETHERSCAN_API_KEY
+        )
+        
+        boa.verify_source(
+            token_blueprint_contract.address,
+            "token.vy",
+            ETHERSCAN_API_KEY
+        )
+        
+        boa.verify_source(
+            factory.address,
+            "factory.vy",
+            ETHERSCAN_API_KEY,
+            constructor_args=[
+                account.address,
+                pool_blueprint_contract.address,
+                token_blueprint_contract.address
+            ]
+        )
+        
+        print("Contracts verified successfully!")
+        
+    except Exception as e:
+        print(f"Verification failed: {e}")
+    
+    return factory
 
-print(get_address) 
+if __name__ == "__main__":
+    factory = deploy_and_verify()
+    print(f"Factory deployed at: {factory.address}") 
 
