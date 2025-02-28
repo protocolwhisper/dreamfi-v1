@@ -1,5 +1,4 @@
-# @version ^0.3.3
-# Chainlink wrapper
+#pragma version >=0.3.0
 
 # https://github.com/smartcontractkit/apeworx-starter-kit/blob/main/ape-config.yaml
 AGGREGATOR_ADDRESS: constant(address) = 0x694AA1769357215DE4FAC081bf1f309aDC325306
@@ -14,10 +13,6 @@ interface AggregatorV3Interface:
 
 DECIMALS: constant(uint8) = 18
 SCALE: constant(uint256) = 10 ** DECIMALS
-
-struct Fund:
-    contract: address
-    amount: uint256
 
 # https://docs.chain.link/data-feeds/price-feeds/addresses?network=ethereum&page=1
 @external
@@ -36,6 +31,6 @@ def getPrice(contract: address) -> uint256:
     # Convert price to unit by adjusting decimal
     priceDecimals: uint8 = feed.decimals()
     if priceDecimals > DECIMALS:
-        return price / pow_mod256(10, priceDecimals - DECIMALS)
+        return price // pow_mod256(10, priceDecimals - DECIMALS)
     else:
         return price * pow_mod256(10, DECIMALS - priceDecimals)
