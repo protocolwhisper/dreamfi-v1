@@ -93,12 +93,13 @@ On success, burns an equivalent amount of CDP from the vault.
 '''
 @external
 def withdraw(user_address: address, asset: address, amount: uint256) -> uint256:
+    #Check that the witdraw is still viable by the health factor
     assert asset.is_contract, "Asset address must be a contract"
     assert asset != empty(address), "Asset address cannot be zero"
     assert amount > 0, "Amount must be greater than 0"
     
     user_cdp: uint256 = self.cdpBorrowed[user_address]
-    assert user_cdp == 0, "User has no cdp"
+
     
     user_collateral: uint256 = self.userCollateral[(user_address, asset)]
     assert user_collateral >= amount, "Insufficient collateral"
@@ -106,16 +107,19 @@ def withdraw(user_address: address, asset: address, amount: uint256) -> uint256:
 
     # I don't get how is when theres two tokens in the game
     asset_price: uint256 = getPrice(asset)
-    cdp_to_burn: uint256 = amount * asset_price 
-    
-    
+    cdp_to_burn: uint256 = amount * asset_price #This is in usdc
+    cdp_price: uint256 = self.cdpPrice(self.getPriceInfo()) #Price of cdp in usdc
+
+    amount_burn: uint256 = cdp_to_burn / cdp_price
+
+    # Update state and perform transfers
     self.poolCollateral[asset] -= amount
     self.userCollateral[(user_address, asset)] -= amount
     
-    # Transfer asset back to user
+    # Transfer
     assert IERC20(asset).transfer(user_address, amount)
     #Burning
-    assert IERC20(self.cdpAsset).burn(cdp_to_burn), "CDP burn failed"
+    assert IERC20(self.cdpAsset).burn(amount_burn), "CDP burn failed"
     
     return amount
 
