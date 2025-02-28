@@ -218,13 +218,13 @@ def liquidate(user: address) -> DynArray[(address, uint256), MAX_POSITIONS]:
 
     return liquidated
 
-@view
+@pure
 @internal
 def userHealthFactor(user: address) -> uint256:
     info: PriceInfo = getPriceInfo(user)
     return info.cdpBorrowed // info.poolCollateral
 
-@view
+@pure
 @internal
 def poolHealthFactor() -> uint256:
     info: PriceInfo = getPriceInfo(self)
