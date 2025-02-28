@@ -167,8 +167,8 @@ Otherwise it burns ${user's borrowed CDP} worth of caller's CDP to the vault
 Then:
 - Move ${user's borrowed CDP} worth of their collateral from vault to caller (burning caller's CDP).
 - Move LIQUIDATE_INCENTIVE_RATIO of user's collateral from vault to caller.
-- Move remaining of user's collateral from vault to liquidate_account.
-Returns (asset, amount) collateral from the target user that was rewarded to the caller.
+- Move remaining of user's collateral from vault to liquidateBeneficiary account.
+Returns (asset, amount) collateral deposited from the user that was rewarded to the caller/liquidator.
 '''
 @external
 def liquidate(user: address) -> DynArray[(address, uint256), MAX_POSITIONS]:
@@ -181,12 +181,13 @@ def liquidate(user: address) -> DynArray[(address, uint256), MAX_POSITIONS]:
     borrowedCollateral: uint256 = userInfo.cdpBorrowed * cdpPrice(userInfo)
     assert userInfo.userCollateral >= borrowedCollateral
 
-    liquidIncentiveCollateral: uint256 = (userInfo.userCollateral * LIQUIDATE_INCENTIVE_RATIO) // 100
-    liquidBenefitCollateral: uint256 = user.userCollateral - liquidIncentiveCollateral - borrowedCollateral
-    assert userInfo.userCollateral == (liquidBenefitCollateral + liquidIncentiveCollateral + borrowedCollateral)
+    liquidatorIncentiveCollateral: uint256 = (userInfo.userCollateral * LIQUIDATE_INCENTIVE_RATIO) // 100
+    liquidatorReceiveCollateral: uint256 = liquidatorIncentiveCollateral + borrowedCollateral
+    beneficiaryReceiveCollateral: uint256 = user.userCollateral - liquidatorReceiveCollateral
+    assert userInfo.userCollateral == liquidatorReceiveCollateral + beneficiaryReceiveCollateral
     
     # Burn user's worth of borrowed CDP from liquidator.
-    # We'll withdraw from user's collateral to pay liquidator for it.
+    # We will withdraw from user's collateral to pay liquidator for it.
     liquidator: address = msg.sender
     extcall IERC20(self.cdpAsset).burn(liquidator, userInfo.cdpBorrowed)
     
@@ -194,7 +195,23 @@ def liquidate(user: address) -> DynArray[(address, uint256), MAX_POSITIONS]:
     # Move remaining of user collateral to li
     liquidated: DynArray[(address, uint256), MAX_POSITIONS] = []
     for asset: address in self.assets:
-        collateral: uint256 = getPrice(asset) * self.userCollateral[(user, asset)]
-        # TODO: count down from {borrow/liqIncent/liqBen}Collat and send the collats
+        price: uint256 = getPrice(asset)
+        collateral: uint256 = price * self.userCollateral[(user, asset)]
 
-    extcall IERC20(self.cdpAsset).transfer(user_address, amount)
+        # From the user's collateral on this asset, reward the liquidator frist.
+        move: uint256 = min(collateral, liquidatorReceiveCollateral)
+        if move > 0:
+            collateral -= move
+            liquidatorReceiveCollateral -= move
+            amount: uint256 = move // price
+            liquidated.append((asset, amount))
+            extcall IERC20(asset).transferFrom(self, liquidator,amount)
+
+        # Then reward the beneficiary if there's any left over.
+        move = min(collateral, beneficiaryReceiveCollateral)
+        if move > 0:
+            beneficiaryReceiveCollateral -= move
+            amount: uint256 = move // price
+            extcall IERC20(asset).transferFrom(self, self.liquidateBeneficiary, amount)
+
+    return liquidated
