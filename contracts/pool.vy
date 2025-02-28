@@ -82,7 +82,7 @@ def deposit(asset: address, amount: uint256):
 
     self.poolCollateral[asset] += amount
     self.userCollateral[user][asset] += amount
-    extcall IERC20(asset).transfer(self, amount) # user -> vault (asset)
+    extcall IERC20(asset).transfer(self, amount, default_return_value=True) # user -> vault (asset)
     extcall IERC20(self.cdpAsset).mint(self, newTokens) # $0 -> vault (CDP)
 
 # Moves ${cdpAmount} from the vault to the user, increasing their debt.
@@ -99,7 +99,7 @@ def borrow(cdpAmount: uint256):
     assert cdpAmount <= cdpBorrowable, "Attempt to borrow more CDP than collateral allows"
     
     self.cdpBorrowed[user] += cdpAmount
-    extcall IERC20(self.cdpAsset).transferFrom(self, user, cdpAmount) # vault -> User (CDP)
+    extcall IERC20(self.cdpAsset).transferFrom(self, user, cdpAmount, default_return_value=True) # vault -> User (CDP)
 
 # Moves ${cdpAmount} from the user to the vault, decreasing their debt.
 @external
@@ -111,7 +111,7 @@ def repay(cdpAmount: uint256):
     assert info.cdpBorrowed >= cdpAmount, "Attempt to repay more CDP than borrowed"
 
     self.cdpBorrowed[user] -= cdpAmount
-    extcall IERC20(self.cdpAsset).transferFrom(user, self, cdpAmount) # User/caller -> vault (CDP)
+    extcall IERC20(self.cdpAsset).transferFrom(user, self, cdpAmount, default_return_value=True) # User/caller -> vault (CDP)
 
 # Moves ${amount} from the vaults's ${asset} account to user's ${asset} account (removing collateral).
 # Fails either if:
@@ -146,10 +146,8 @@ def withdraw(asset: address, amount: uint256) -> uint256:
     self.poolCollateral[asset] -= amount
     self.userCollateral[user_address][asset] -= amount
         
-    
     # Transfer
-    extcall IERC20(asset).transferFrom(self, user_address, amount) #Transfer collateral to user
-    
+    extcall IERC20(asset).transferFrom(self, user_address, amount, default_return_value=True) #Transfer collateral to user
     extcall IERC20(self.cdpAsset).burn(self, amount_burn) #Burning cdp from vault
     
     return amount
@@ -200,14 +198,14 @@ def liquidate(user: address) -> DynArray[Fund, MAX_POSITIONS]:
             liquidatorReceiveCollateral -= move
             amount: uint256 = move // price
             liquidated.append(Fund(asset=asset, amount=amount))
-            extcall IERC20(asset).transferFrom(self, liquidator, amount)
+            extcall IERC20(asset).transferFrom(self, liquidator, amount, default_return_value=True)
 
         # Then reward the beneficiary if there's any left over.
         move = min(collateral, beneficiaryReceiveCollateral)
         if move > 0:
             beneficiaryReceiveCollateral -= move
             amount: uint256 = move // price
-            extcall IERC20(asset).transferFrom(self, self.liquidateBeneficiary, amount)
+            extcall IERC20(asset).transferFrom(self, self.liquidateBeneficiary, amount, default_return_value=True)
 
     return liquidated
 
