@@ -1,4 +1,4 @@
-#pragma version >=0.3.0
+#pragma version >=0.4.0
 
 import currency
 import IERC20
@@ -83,7 +83,7 @@ def deposit(asset: address, amount: uint256):
     self.poolCollateral[asset] += amount
     self.userCollateral[user][asset] += amount
     extcall IERC20(asset).transfer(self, amount) # user -> vault (asset)
-    # TODO: IERC20(self.cdpAsset).mint(self, newTokens)
+    extcall IERC20(self.cdpAsset).mint(self, newTokens) # $0 -> vault (CDP)
 
 # Moves ${cdpAmount} from the vault to the user, increasing their debt.
 # They must never borrow more than BORROW_RATIO of their deposited collateral.
@@ -121,7 +121,7 @@ def repay(cdpAmount: uint256):
 @external
 def withdraw(asset: address, amount: uint256) -> uint256:
     #Check user health factor
-    assert self.userHealthFactor(msg.sender) >= 1, " Bad user health factor"
+    
     #Check that the witdraw is still viable by the health factor
     assert asset.is_contract, "Asset address must be a contract"
     assert asset != empty(address), "Asset address cannot be zero"
@@ -134,22 +134,23 @@ def withdraw(asset: address, amount: uint256) -> uint256:
     user_collateral: uint256 = self.userCollateral[user_address][asset] #amount of asset per user
     assert user_collateral >= amount, "Insufficient collateral"
     
+    info: PriceInfo = self.getPriceInfo(user_address)
 
     asset_price: uint256 = currency.getPrice(asset) #Asset price in usdc
     cdp_to_burn: uint256 = amount * asset_price # amount in usdc
-    cdp_price: uint256 = self.cdpPrice(self.getPriceInfo(user_address)) #Price of cdp in usdc 
+    cdp_price: uint256 = self.cdpPrice(info) #Price of cdp in usdc 
 
     amount_burn: uint256 = cdp_to_burn // cdp_price
 
-
-    # Update state and perform transfers
+    assert info.cdpBorrowed <= self.cdpBorrowMax(info)
     self.poolCollateral[asset] -= amount
     self.userCollateral[user_address][asset] -= amount
+        
     
     # Transfer
-    extcall IERC20(asset).transfer(user_address, amount) #Transfer collateral to user
+    extcall IERC20(asset).transferFrom(self, user_address, amount) #Transfer collateral to user
     
-    extcall IERC20(self.cdpAsset).burn(amount_burn) #Burning cdp from vault
+    extcall IERC20(self.cdpAsset).burn(self, amount_burn) #Burning cdp from vault
     
     return amount
 
@@ -184,12 +185,12 @@ def liquidate(user: address) -> DynArray[Fund, MAX_POSITIONS]:
     # We will withdraw from user's collateral to pay liquidator for it.
     liquidator: address = msg.sender
     extcall IERC20(self.cdpAsset).burn(liquidator, userInfo.cdpBorrowed)
-    
+
     # Move ${user CDP borrowed} + ${incentive} of user collateral to liquidator.
     # Move remaining of user collateral to li
-    liquidated: DynArray[(address, uint256), MAX_POSITIONS] = []
+    liquidated: DynArray[Fund, MAX_POSITIONS] = []
     for asset: address in self.assets:
-        price: uint256 = getPrice(asset)
+        price: uint256 = currency.getPrice(asset)
         collateral: uint256 = price * self.userCollateral[user][asset]
 
         # From the user's collateral on this asset, reward the liquidator frist.
@@ -214,7 +215,8 @@ def liquidate(user: address) -> DynArray[Fund, MAX_POSITIONS]:
 @internal
 def userHealthFactor(user: address) -> uint256:
     info: PriceInfo = self.getPriceInfo(user)
-    return info.cdpBorrowed // info.poolCollateral
+    cdp_price: uint256 = info.cdpBorrowed * self.cdpPrice(info)
+    return cdp_price // info.userCollateral
 
 @view
 @internal

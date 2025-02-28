@@ -1,4 +1,4 @@
-#pragma version >=0.3.0
+#pragma version >=0.4.0
 
 # https://github.com/smartcontractkit/apeworx-starter-kit/blob/main/ape-config.yaml
 AGGREGATOR_ADDRESS: constant(address) = 0x694AA1769357215DE4FAC081bf1f309aDC325306
@@ -26,9 +26,10 @@ def getPrice(contract: address) -> uint256:
     startedAt: uint256 = 0
     updatedAt: uint256 = 0
     answeredInRound_Deprecated: uint80 = 0
-    (roundId, price, startedAt, updatedAt, answeredInRound_Deprecated) = staticcall(feed.latestRoundData())
+    (roundId, price, startedAt, updatedAt, answeredInRound_Deprecated) = staticcall feed.latestRoundData()
+
     # Convert price to unit by adjusting decimal
-    priceDecimals: uint256 = convert(staticcall(feed.decimals()), uint256)
+    priceDecimals: uint256 = convert(staticcall feed.decimals(), uint256)
     if priceDecimals > DECIMALS:
         return convert(price, uint256) // 10 ** (priceDecimals - DECIMALS)
     else:
