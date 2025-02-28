@@ -130,6 +130,8 @@ On success, burns an equivalent amount of CDP from the vault.
 '''
 @external
 def withdraw(asset: address, amount: uint256) -> uint256:
+    #Check user health factor
+    assert userHealthFactor(msg.sender) >= 1, " Bad user health factor"
     #Check that the witdraw is still viable by the health factor
     assert asset.is_contract, "Asset address must be a contract"
     assert asset != empty(address), "Asset address cannot be zero"
@@ -145,7 +147,7 @@ def withdraw(asset: address, amount: uint256) -> uint256:
 
     asset_price: uint256 = getPrice(asset) #Asset price in usdc
     cdp_to_burn: uint256 = amount * asset_price # amount in usdc
-    cdp_price: uint256 = self.cdpPrice(self.getPriceInfo()) #Price of cdp in usdc
+    cdp_price: uint256 = self.cdpPrice(self.getPriceInfo()) #Price of cdp in usdc 
 
     amount_burn: uint256 = cdp_to_burn // cdp_price
 
@@ -215,3 +217,15 @@ def liquidate(user: address) -> DynArray[(address, uint256), MAX_POSITIONS]:
             extcall IERC20(asset).transferFrom(self, self.liquidateBeneficiary, amount)
 
     return liquidated
+
+@view
+@internal
+def userHealthFactor(user: address) -> uint256:
+    info: PriceInfo = getPriceInfo(user)
+    return info.cdpBorrowed // info.poolCollateral
+
+@view
+@internal
+def poolHealthFactor() -> uint256:
+    info: PriceInfo = getPriceInfo(self)
+    return info.cdpSupply // info.poolCollateral
