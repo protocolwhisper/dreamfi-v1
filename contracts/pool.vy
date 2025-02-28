@@ -97,8 +97,7 @@ def borrow(cdpAmount: uint256):
     assert cdpAmount > 0, "Borrow would be a no-op"
 
     info: PriceInfo = getPriceInfo()
-    if info.cdpBorrowed < cdpBorrowMax(info):
-        return # User/caller is available to be liquidated.
+    assert cdpBorrowMax(info) > info.cdpBorrowed, "Caller is up for liquidation"
 
     cdpBorrowable: uint256 = cdpBorrowMax(info) - info.cdpBorrowed
     assert cdpAmount <= cdpBorrowable, "Attempt to borrow more CDP than collateral allows"
@@ -111,7 +110,13 @@ Moves ${cdpAmount} from the user to the vault, decreasing their debt.
 '''
 @external
 def repay(cdpAmount: uint256):
-    return 0 # TODO
+    assert cdpAmount > 0, "Repay would be a no-op"
+
+    info: PriceInfo = getPriceInfo()
+    assert info.cdpBorrowed >= cdpAmount, "Attempt to repay more CDP than borrowed"
+
+    self.cdpBorrowed[msg.sender] -= cdpAmount
+    extcall IERC20(self.cdpAsset).transferFrom(msg.sender, self, cdpAmount) # User/caller -> vault (CDP)
 
 '''
 Moves ${amount} from the vaults's ${asset} account to user's ${asset} account (removing collateral).
