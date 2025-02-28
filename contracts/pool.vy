@@ -41,9 +41,8 @@ struct PriceInfo:
 
 @view
 @internal
-def getPriceInfo():
+def getPriceInfo() -> PriceInfo:
     info: PriceInfo = empty(PriceInfo)
-
     for asset: address in self.assets:
         price: uint256 = getPrice(asset)
         info.poolCollateral += price * self.poolCollateral[asset]
@@ -52,6 +51,17 @@ def getPriceInfo():
     info.cdpBorrowed = self.cdpBorrowed[msg.sender]
     info.cdpSupply = extcall IERC20(self.cdpAsset).totalSupply()
     return info
+
+@pure
+@internal
+def cdpPrice(info: PriceInfo) -> uint256:
+    return info.poolCollateral // info.cdpSupply
+
+@pure
+@internal
+def cdpBorrowMax(info: PriceInfo) -> uint256:
+    collateralBorrowMax: uint256 = (info.userCollateral * BORROW_RATIO) // 100
+    return (collateralBorrowMax * info.cdpSupply) // info.poolCollateral
 
 '''
 Moves ${amount} from the user's ${asset} account to vault's ${asset} account (creating collateral).
@@ -62,12 +72,20 @@ def deposit(asset: address, amount: uint256):
     assert asset._is_contract
     assert amount > 0
 
+    info: PriceInfo = getPriceInfo()
+    
+    # Figure out how many new tokens to mint
+    newTokens: uint256 = 0
+    if info.cdpSupply == 0:
+        newTokens = 1_000_000 # arbitrary starting tokens minted
+    else:
+        newPoolCollateral: uint256 = info.poolCollateral + (getPrice(asset) * amount)
+        newTokens = (newPoolCollateral * info.cdpSupply) // info.poolCollateral
+
     self.poolCollateral[asset] += amount
     self.userCollateral[(msg.sender, asset)] += amount
     extcall IERC20(asset).transfer(self, amount) # caller(user) -> vault (asset)
-
-    # TODO
-
+    # TODO: IERC20(self.cdpAsset).mint(self, newTokens)
 
 '''
 Moves ${cdpAmount} from the vault to the user, increasing their debt.
