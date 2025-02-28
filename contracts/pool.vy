@@ -140,17 +140,15 @@ def withdraw(asset: address, amount: uint256) -> uint256:
     cdp_to_burn: uint256 = amount * asset_price # amount in usdc
     cdp_price: uint256 = self.cdpPrice(info) #Price of cdp in usdc 
 
-    amount_burn: uint256 = cdp_to_burn // cdp_price
-
+    amount_burn: uint256 = (cdp_to_burn * currency.SCALE) // cdp_price  
+    
     assert info.cdpBorrowed <= self.cdpBorrowMax(info)
     self.poolCollateral[asset] -= amount
     self.userCollateral[user_address][asset] -= amount
-        
     
     # Transfer
-    extcall IERC20(asset).transferFrom(self, user_address, amount) #Transfer collateral to user
-    
-    extcall IERC20(self.cdpAsset).burn(self, amount_burn) #Burning cdp from vault
+    extcall IERC20(asset).transferFrom(self, user_address, amount)
+    extcall IERC20(self.cdpAsset).burn(self, amount_burn)
     
     return amount
 
@@ -216,10 +214,10 @@ def liquidate(user: address) -> DynArray[Fund, MAX_POSITIONS]:
 def userHealthFactor(user: address) -> uint256:
     info: PriceInfo = self.getPriceInfo(user)
     cdp_price: uint256 = info.cdpBorrowed * self.cdpPrice(info)
-    return cdp_price // info.userCollateral
+    return (cdp_price * currency.SCALE) // info.userCollateral
 
 @view
 @internal
 def poolHealthFactor() -> uint256:
     info: PriceInfo = self.getPriceInfo(self)
-    return info.cdpSupply // info.poolCollateral
+    return (info.cdpSupply * currency.SCALE) // info.poolCollateral

@@ -1,5 +1,7 @@
 #pragma version >=0.4.0
 
+
+
 MAX_POSITIONS: public(constant(uint8)) = 10
 DECIMALS: public(constant(uint8)) = 18
 
