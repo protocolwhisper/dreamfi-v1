@@ -10,7 +10,6 @@ admin: address
 @deploy
 def __init__(admin: address, pool_blueprint: address, token_blueprint: address):
     assert admin != empty(address)
-
     self.admin = admin
     TOKEN_BLUEPRINT = token_blueprint
     POOL_BLUEPRINT = pool_blueprint
