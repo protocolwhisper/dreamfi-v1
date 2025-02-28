@@ -6,10 +6,10 @@ from snekmate import IERC20
 
 MAX_POSITIONS: constant(uint8) = 10
 BORROW_RATIO: constant(uint256) = 80 # N / 100
-LIQUIDATE_RATIO: constant(uint256) = 5 # N / 100
+LIQUIDATE_INCENTIVE_RATIO: constant(uint256) = 5 # N / 100
 
 cdpAsset: immutable(address)
-liquidateAccount: immutable(address)
+liquidateBeneficiary: immutable(address)
 assets: immutable(DynArray[address, MAX_POSITIONS])
 
 cdpBorrowed: HashMap[address, uint256] # user => amount of cdp borrowed by user
@@ -23,7 +23,7 @@ The sum of AssetWeight must equal 100 * currency.SCALE
 @deploy
 def __init__(
     cdp_asset: address, # the asset address of the CDP token
-    liquidate_account: address, # where protocol-benefitting liquidated assets are stored.
+    liquidate_beneficiary: address, # where protocol-benefitting liquidated assets are sent.
     assets: DynArray[address, MAX_POSITIONS], # list of asset addresses for this pool
 ):
     assert cdp_asset._is_contract
@@ -31,7 +31,7 @@ def __init__(
 
     self.assets = assets
     self.cdpAsset = cdp_asset
-    self.liquidateAccount = liquidate_account
+    self.liquidateBeneficiary = liquidate_beneficiary
 
 struct PriceInfo:
     poolCollateral: uint256
@@ -41,14 +41,14 @@ struct PriceInfo:
 
 @view
 @internal
-def getPriceInfo() -> PriceInfo:
+def getPriceInfo(user: address) -> PriceInfo:
     info: PriceInfo = empty(PriceInfo)
     for asset: address in self.assets:
         price: uint256 = getPrice(asset)
         info.poolCollateral += price * self.poolCollateral[asset]
-        info.userCollateral += price * self.userCollateral[(msg.sender, asset)]
+        info.userCollateral += price * self.userCollateral[(user, asset)]
 
-    info.cdpBorrowed = self.cdpBorrowed[msg.sender]
+    info.cdpBorrowed = self.cdpBorrowed[user]
     info.cdpSupply = extcall IERC20(self.cdpAsset).totalSupply()
     return info
 
@@ -73,7 +73,8 @@ def deposit(asset: address, amount: uint256):
     assert asset != empty(address), "Asset must be valid"
     assert amount > 0, "Deposit would be a no-op"
 
-    info: PriceInfo = getPriceInfo()
+    user: address = msg.sender
+    info: PriceInfo = getPriceInfo(user)
     
     # Figure out how many new tokens to mint
     newTokens: uint256 = 0
@@ -84,8 +85,8 @@ def deposit(asset: address, amount: uint256):
         newTokens = (newPoolCollateral * info.cdpSupply) // info.poolCollateral
 
     self.poolCollateral[asset] += amount
-    self.userCollateral[(msg.sender, asset)] += amount
-    extcall IERC20(asset).transfer(self, amount) # caller(user) -> vault (asset)
+    self.userCollateral[(userr, asset)] += amount
+    extcall IERC20(asset).transfer(self, amount) # user -> vault (asset)
     # TODO: IERC20(self.cdpAsset).mint(self, newTokens)
 
 '''
@@ -96,14 +97,15 @@ They must never borrow more than BORROW_RATIO of their deposited collateral.
 def borrow(cdpAmount: uint256):
     assert cdpAmount > 0, "Borrow would be a no-op"
 
-    info: PriceInfo = getPriceInfo()
-    assert cdpBorrowMax(info) > info.cdpBorrowed, "Caller is up for liquidation"
+    user: address = msg.sender
+    info: PriceInfo = getPriceInfo(user)
+    assert cdpBorrowMax(info) > info.cdpBorrowed, "User is up for liquidation"
 
     cdpBorrowable: uint256 = cdpBorrowMax(info) - info.cdpBorrowed
     assert cdpAmount <= cdpBorrowable, "Attempt to borrow more CDP than collateral allows"
     
-    self.cdpBorrowed[msg.sender] += cdpAmount
-    extcall IERC20(self.cdpAsset).transferFrom(self, msg.sender, cdpAmount) # vault -> User/caller (CDP)
+    self.cdpBorrowed[user] += cdpAmount
+    extcall IERC20(self.cdpAsset).transferFrom(self, user, cdpAmount) # vault -> User (CDP)
 
 '''
 Moves ${cdpAmount} from the user to the vault, decreasing their debt.
@@ -112,11 +114,12 @@ Moves ${cdpAmount} from the user to the vault, decreasing their debt.
 def repay(cdpAmount: uint256):
     assert cdpAmount > 0, "Repay would be a no-op"
 
-    info: PriceInfo = getPriceInfo()
+    user: address = msg.sender
+    info: PriceInfo = getPriceInfo(user)
     assert info.cdpBorrowed >= cdpAmount, "Attempt to repay more CDP than borrowed"
 
-    self.cdpBorrowed[msg.sender] -= cdpAmount
-    extcall IERC20(self.cdpAsset).transferFrom(msg.sender, self, cdpAmount) # User/caller -> vault (CDP)
+    self.cdpBorrowed[user] -= cdpAmount
+    extcall IERC20(self.cdpAsset).transferFrom(user, self, cdpAmount) # User/caller -> vault (CDP)
 
 '''
 Moves ${amount} from the vaults's ${asset} account to user's ${asset} account (removing collateral).
@@ -126,12 +129,13 @@ Fails either if:
 On success, burns an equivalent amount of CDP from the vault.
 '''
 @external
-def withdraw(user_address: address, asset: address, amount: uint256) -> uint256:
+def withdraw(asset: address, amount: uint256) -> uint256:
     #Check that the witdraw is still viable by the health factor
     assert asset.is_contract, "Asset address must be a contract"
     assert asset != empty(address), "Asset address cannot be zero"
     assert amount > 0, "Amount must be greater than 0"
     
+    user_address: address = msg.sender
     user_cdp: uint256 = self.cdpBorrowed[user_address]
 
     
@@ -159,15 +163,38 @@ def withdraw(user_address: address, asset: address, amount: uint256) -> uint256:
 
 '''
 Attempts to liquidate the passed in user's deposited collateral.
-Returns [] user's borrowed CDP value is under the BORROW_RATIO of their collateral.
-
-Otherwise it moves ${user's borrowed CDP} worth of caller's CDP to the vault.
+Otherwise it burns ${user's borrowed CDP} worth of caller's CDP to the vault
 Then:
 - Move ${user's borrowed CDP} worth of their collateral from vault to caller (burning caller's CDP).
-- Move LIQUIDATE_RATIO of user's collateral from vault to caller.
+- Move LIQUIDATE_INCENTIVE_RATIO of user's collateral from vault to caller.
 - Move remaining of user's collateral from vault to liquidate_account.
+Returns (asset, amount) collateral from the target user that was rewarded to the caller.
 '''
-
 @external
 def liquidate(user: address) -> DynArray[(address, uint256), MAX_POSITIONS]:
-    return 0 # TODO
+    assert user != empty(address), "Invalid target address for liquidation"
+
+    userInfo: PriceInfo = getPriceInfo(user)
+    if cdpBorrowMax(userInfo) >= userInfo.cdpBorrowed:
+        return [] # User isnt liquidatable
+
+    borrowedCollateral: uint256 = userInfo.cdpBorrowed * cdpPrice(userInfo)
+    assert userInfo.userCollateral >= borrowedCollateral
+
+    liquidIncentiveCollateral: uint256 = (userInfo.userCollateral * LIQUIDATE_INCENTIVE_RATIO) // 100
+    liquidBenefitCollateral: uint256 = user.userCollateral - liquidIncentiveCollateral - borrowedCollateral
+    assert userInfo.userCollateral == (liquidBenefitCollateral + liquidIncentiveCollateral + borrowedCollateral)
+    
+    # Burn user's worth of borrowed CDP from liquidator.
+    # We'll withdraw from user's collateral to pay liquidator for it.
+    liquidator: address = msg.sender
+    extcall IERC20(self.cdpAsset).burn(liquidator, userInfo.cdpBorrowed)
+    
+    # Move ${user CDP borrowed} + ${incentive} of user collateral to liquidator.
+    # Move remaining of user collateral to li
+    liquidated: DynArray[(address, uint256), MAX_POSITIONS] = []
+    for asset: address in self.assets:
+        collateral: uint256 = getPrice(asset) * self.userCollateral[(user, asset)]
+        # TODO: count down from {borrow/liqIncent/liqBen}Collat and send the collats
+
+    extcall IERC20(self.cdpAsset).transfer(user_address, amount)
