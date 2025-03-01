@@ -75,3 +75,4 @@ def deploy_contracts(is_local: bool = True):
         print(f"Deployment failed: {e}")
         return None
 
+deploy_contracts(is_local=False)

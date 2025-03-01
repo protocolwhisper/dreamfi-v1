@@ -1,0 +1,8 @@
+/Users/protocolwhisper/Documents/Working Dir/DreamFi2025/deployor/target/debug/deps/libscale_info_derive-855bd9b080afe18e.dylib: /Users/protocolwhisper/.cargo/registry/src/index.crates.io-6f17d22bba15001f/scale-info-derive-2.11.6/src/lib.rs /Users/protocolwhisper/.cargo/registry/src/index.crates.io-6f17d22bba15001f/scale-info-derive-2.11.6/src/attr.rs /Users/protocolwhisper/.cargo/registry/src/index.crates.io-6f17d22bba15001f/scale-info-derive-2.11.6/src/trait_bounds.rs /Users/protocolwhisper/.cargo/registry/src/index.crates.io-6f17d22bba15001f/scale-info-derive-2.11.6/src/utils.rs
+
+/Users/protocolwhisper/Documents/Working Dir/DreamFi2025/deployor/target/debug/deps/scale_info_derive-855bd9b080afe18e.d: /Users/protocolwhisper/.cargo/registry/src/index.crates.io-6f17d22bba15001f/scale-info-derive-2.11.6/src/lib.rs /Users/protocolwhisper/.cargo/registry/src/index.crates.io-6f17d22bba15001f/scale-info-derive-2.11.6/src/attr.rs /Users/protocolwhisper/.cargo/registry/src/index.crates.io-6f17d22bba15001f/scale-info-derive-2.11.6/src/trait_bounds.rs /Users/protocolwhisper/.cargo/registry/src/index.crates.io-6f17d22bba15001f/scale-info-derive-2.11.6/src/utils.rs
+
+/Users/protocolwhisper/.cargo/registry/src/index.crates.io-6f17d22bba15001f/scale-info-derive-2.11.6/src/lib.rs:
+/Users/protocolwhisper/.cargo/registry/src/index.crates.io-6f17d22bba15001f/scale-info-derive-2.11.6/src/attr.rs:
+/Users/protocolwhisper/.cargo/registry/src/index.crates.io-6f17d22bba15001f/scale-info-derive-2.11.6/src/trait_bounds.rs:
+/Users/protocolwhisper/.cargo/registry/src/index.crates.io-6f17d22bba15001f/scale-info-derive-2.11.6/src/utils.rs:

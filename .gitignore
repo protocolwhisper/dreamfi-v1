@@ -1,0 +1,4 @@
+/contracts/.env
+/deployor/.env
+/ethers/target
+/ethers/Cargo.lock

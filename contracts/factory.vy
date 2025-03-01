@@ -5,7 +5,7 @@ import pool
 
 TOKEN_BLUEPRINT: immutable(address)
 POOL_BLUEPRINT: immutable(address)
-admin: address
+admin: public(address)
 
 @deploy
 def __init__(admin: address, pool_blueprint: address, token_blueprint: address):
@@ -27,5 +27,5 @@ def new_pool(collateral_assets: DynArray[address, pool.MAX_POSITIONS], name: Str
     liquidate_beneficiary: address = self.admin
     cdp_addr: address = create_from_blueprint(TOKEN_BLUEPRINT, name, symbol, currency.DECIMALS, domain_712, version_712)
     pool_addr: address = create_from_blueprint(POOL_BLUEPRINT, cdp_addr, liquidate_beneficiary, collateral_assets, revert_on_failure=True, value=0)
-    log NewPool(pool_addr, cdp_addr)
+   # log NewPool(pool_addr, cdp_addr)
     return (pool_addr, cdp_addr)
