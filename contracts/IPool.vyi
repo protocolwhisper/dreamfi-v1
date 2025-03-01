@@ -1,0 +1,23 @@
+@external
+def deposit(asset: address, amount: uint256):
+    ...
+
+@external
+def borrow(cdpAmount: uint256):
+    ...
+
+@external
+def repay(cdpAmount: uint256):
+    ...
+
+@external
+def withdraw(asset: address, amount: uint256):
+    ...
+
+struct Fund:
+    asset: address
+    amount: uint256
+
+@external
+def liquidate(user: address) -> DynArray[Fund, 10]:
+    ...

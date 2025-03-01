@@ -17,8 +17,8 @@ SCALE: public(constant(uint256)) = 10 ** DECIMALS
 # https://docs.chain.link/data-feeds/price-feeds/addresses?network=ethereum&page=1
 
 @view
-def getPrice(contract: address) -> uint256:
-    feed: AggregatorV3Interface = AggregatorV3Interface(contract)
+def getPrice(assetOracle: address) -> uint256:
+    feed: AggregatorV3Interface = AggregatorV3Interface(assetOracle)
     
     # Get the price from ChainLink
     roundId: uint80 = 0

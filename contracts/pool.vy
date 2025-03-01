@@ -8,9 +8,13 @@ MAX_POSITIONS: public(constant(uint8)) = 10
 BORROW_RATIO: constant(uint256) = 80 # N / 100
 LIQUIDATE_INCENTIVE_RATIO: constant(uint256) = 5 # N / 100
 
+struct Position:
+    oracle: address
+    asset: address
+
 cdpAsset: address
 liquidateBeneficiary: address
-assets: DynArray[address, MAX_POSITIONS]
+positions: DynArray[Position, MAX_POSITIONS]
 
 cdpBorrowed: HashMap[address, uint256] # user => amount of cdp borrowed by user
 poolCollateral: HashMap[address, uint256] # asset => amount of asset for entire pool
@@ -22,16 +26,17 @@ userCollateral: public(HashMap[address, HashMap[address, uint256]]) # user => (a
 def __init__(
     cdp_asset: address, # the asset address of the CDP token
     liquidate_beneficiary: address, # where protocol-benefitting liquidated assets are sent.
-    asset_positions: DynArray[address, MAX_POSITIONS], # list of asset addresses for this pool
+    collateral_positions: DynArray[Position, MAX_POSITIONS], # list of (oracle, asset) for this pool
 ):
     assert cdp_asset.is_contract
-    assert len(asset_positions) > 0
+    assert len(collateral_positions) > 0
 
-    self.assets = asset_positions
     self.cdpAsset = cdp_asset
+    self.positions = collateral_positions
     self.liquidateBeneficiary = liquidate_beneficiary
 
 struct PriceInfo:
+    assetPrice: uint256
     poolCollateral: uint256
     userCollateral: uint256
     cdpBorrowed: uint256
@@ -39,12 +44,15 @@ struct PriceInfo:
 
 @view
 @internal
-def getPriceInfo(user: address) -> PriceInfo:
+def getPriceInfo(user: address, optional_asset: address) -> PriceInfo:
     info: PriceInfo = empty(PriceInfo)
-    for asset: address in self.assets:
-        price: uint256 = currency.getPrice(asset)
-        info.poolCollateral += price * self.poolCollateral[asset]
-        info.userCollateral += price * self.userCollateral[user][asset]
+    for position: Position in self.positions:
+        price: uint256 = currency.getPrice(position.oracle)
+        info.poolCollateral += price * self.poolCollateral[position.asset]
+        info.userCollateral += price * self.userCollateral[user][position.asset]
+
+        if position.asset == optional_asset:
+            info.assetPrice = price
 
     info.cdpBorrowed = self.cdpBorrowed[user]
     info.cdpSupply = staticcall IERC20(self.cdpAsset).totalSupply()
@@ -70,21 +78,22 @@ def deposit(asset: address, amount: uint256):
     assert amount > 0, "Deposit would be a no-op"
 
     user: address = msg.sender
-    info: PriceInfo = self.getPriceInfo(user)
+    info: PriceInfo = self.getPriceInfo(user, asset)
     
     # Figure out how many new tokens to mint
     newTokens: uint256 = 0
     if info.cdpSupply == 0:
         newTokens = 1_000_000 # arbitrary starting tokens minted
     else:
-        newPoolCollateral: uint256 = info.poolCollateral + (currency.getPrice(asset) * amount)
+        newPoolCollateral: uint256 = info.poolCollateral + (info.assetPrice * amount)
         newTokens = (newPoolCollateral * info.cdpSupply) // info.poolCollateral
 
     self.poolCollateral[asset] += amount
     self.userCollateral[user][asset] += amount
-
-    extcall IERC20(asset).transferFrom(user, self, amount, default_return_value=True) # user -> vault (asset)
+    
     extcall IERC20(self.cdpAsset).mint(self, newTokens) # $0 -> vault (CDP)
+    extcall IERC20(asset).transferFrom(user, self, amount, default_return_value=True) # user -> vault (asset)
+    
 
 # Moves ${cdpAmount} from the vault to the user, increasing their debt.
 # They must never borrow more than BORROW_RATIO of their deposited collateral.
@@ -93,7 +102,7 @@ def borrow(cdpAmount: uint256):
     assert cdpAmount > 0, "Borrow would be a no-op"
 
     user: address = msg.sender
-    info: PriceInfo = self.getPriceInfo(user)
+    info: PriceInfo = self.getPriceInfo(user, empty(address))
     assert self.cdpBorrowMax(info) > info.cdpBorrowed, "User is up for liquidation"
 
     cdpBorrowable: uint256 = self.cdpBorrowMax(info) - info.cdpBorrowed
@@ -108,7 +117,7 @@ def repay(cdpAmount: uint256):
     assert cdpAmount > 0, "Repay would be a no-op"
 
     user: address = msg.sender
-    info: PriceInfo = self.getPriceInfo(user)
+    info: PriceInfo = self.getPriceInfo(user, empty(address))
     assert info.cdpBorrowed >= cdpAmount, "Attempt to repay more CDP than borrowed"
 
     self.cdpBorrowed[user] -= cdpAmount
@@ -120,7 +129,7 @@ def repay(cdpAmount: uint256):
 # - it would bring their deposited value bellow the borrowed CDP value.
 # On success, burns an equivalent amount of CDP from the vault.
 @external
-def withdraw(asset: address, amount: uint256) -> uint256:
+def withdraw(asset: address, amount: uint256):
     #Check user health factor
     
     #Check that the witdraw is still viable by the health factor
@@ -135,9 +144,9 @@ def withdraw(asset: address, amount: uint256) -> uint256:
     user_collateral: uint256 = self.userCollateral[user_address][asset] #amount of asset per user
     assert user_collateral >= amount, "Insufficient collateral"
     
-    info: PriceInfo = self.getPriceInfo(user_address)
+    info: PriceInfo = self.getPriceInfo(user_address, asset)
 
-    asset_price: uint256 = currency.getPrice(asset) #Asset price in usdc
+    asset_price: uint256 = info.assetPrice #Asset price in usdc
     cdp_to_burn: uint256 = amount * asset_price # amount in usdc
     cdp_price: uint256 = self.cdpPrice(info) #Price of cdp in usdc 
 
@@ -150,8 +159,6 @@ def withdraw(asset: address, amount: uint256) -> uint256:
     # Transfer
     extcall IERC20(asset).transfer(user_address, amount)
     extcall IERC20(self.cdpAsset).burn(self, amount_burn)
-    
-    return amount
 
 struct Fund:
     asset: address
@@ -168,7 +175,7 @@ struct Fund:
 def liquidate(user: address) -> DynArray[Fund, MAX_POSITIONS]:
     assert user != empty(address), "Invalid target address for liquidation"
 
-    userInfo: PriceInfo = self.getPriceInfo(user)
+    userInfo: PriceInfo = self.getPriceInfo(user, empty(address))
     if self.cdpBorrowMax(userInfo) >= userInfo.cdpBorrowed:
         return [] # User isnt liquidatable
 
@@ -188,9 +195,9 @@ def liquidate(user: address) -> DynArray[Fund, MAX_POSITIONS]:
     # Move ${user CDP borrowed} + ${incentive} of user collateral to liquidator.
     # Move remaining of user collateral to li
     liquidated: DynArray[Fund, MAX_POSITIONS] = []
-    for asset: address in self.assets:
-        price: uint256 = currency.getPrice(asset)
-        collateral: uint256 = price * self.userCollateral[user][asset]
+    for position: Position in self.positions:
+        price: uint256 = currency.getPrice(position.oracle)
+        collateral: uint256 = price * self.userCollateral[user][position.asset]
 
         # From the user's collateral on this asset, reward the liquidator frist.
         move: uint256 = min(collateral, liquidatorReceiveCollateral)
@@ -198,27 +205,27 @@ def liquidate(user: address) -> DynArray[Fund, MAX_POSITIONS]:
             collateral -= move
             liquidatorReceiveCollateral -= move
             amount: uint256 = move // price
-            liquidated.append(Fund(asset=asset, amount=amount))
-            extcall IERC20(asset).transferFrom(self, liquidator, amount, default_return_value=True)
+            liquidated.append(Fund(asset=position.asset, amount=amount))
+            extcall IERC20(position.asset).transferFrom(self, liquidator, amount, default_return_value=True)
 
         # Then reward the beneficiary if there's any left over.
         move = min(collateral, beneficiaryReceiveCollateral)
         if move > 0:
             beneficiaryReceiveCollateral -= move
             amount: uint256 = move // price
-            extcall IERC20(asset).transferFrom(self, self.liquidateBeneficiary, amount, default_return_value=True)
+            extcall IERC20(position.asset).transferFrom(self, self.liquidateBeneficiary, amount, default_return_value=True)
 
     return liquidated
 
 @view
 @internal
 def userHealthFactor(user: address) -> uint256:
-    info: PriceInfo = self.getPriceInfo(user)
+    info: PriceInfo = self.getPriceInfo(user, empty(address))
     cdp_price: uint256 = info.cdpBorrowed * self.cdpPrice(info)
     return (cdp_price * currency.SCALE) // info.userCollateral
 
 @view
 @internal
 def poolHealthFactor() -> uint256:
-    info: PriceInfo = self.getPriceInfo(self)
+    info: PriceInfo = self.getPriceInfo(self, empty(address))
     return (info.cdpSupply * currency.SCALE) // info.poolCollateral

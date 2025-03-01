@@ -21,12 +21,12 @@ event NewPool:
     
 # this also needs to deploy the CDP contract per vault  
 @external
-def new_pool(collateral_assets: DynArray[address, pool.MAX_POSITIONS], name: String[25], symbol: String[5]) -> (address, address):
+def new_pool(collateral_positions: DynArray[pool.Position, pool.MAX_POSITIONS], name: String[25], symbol: String[5]) -> (address, address):
     domain_712: String[50] = "Dream Finance"
     version_712: String[25] = "1"
 
     cdp_addr: address = create_from_blueprint(TOKEN_BLUEPRINT, name, symbol, currency.DECIMALS, domain_712, version_712)
-    pool_addr: address = create_from_blueprint(POOL_BLUEPRINT, cdp_addr, self.liquidate_beneficiary, collateral_assets)
+    pool_addr: address = create_from_blueprint(POOL_BLUEPRINT, cdp_addr, self.liquidate_beneficiary, collateral_positions)
     extcall IERC20(cdp_addr).set_minter(pool_addr, True)
 
     log NewPool(pool_addr, cdp_addr)
