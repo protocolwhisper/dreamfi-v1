@@ -2,15 +2,16 @@
 
 import currency
 import pool
+import IERC20
 
 TOKEN_BLUEPRINT: immutable(address)
 POOL_BLUEPRINT: immutable(address)
-admin: address
+liquidate_beneficiary: address
 
 @deploy
-def __init__(admin: address, pool_blueprint: address, token_blueprint: address):
-    assert admin != empty(address)
-    self.admin = admin
+def __init__(liquidate_beneficiary: address, pool_blueprint: address, token_blueprint: address):
+    assert liquidate_beneficiary != empty(address)
+    self.liquidate_beneficiary = liquidate_beneficiary
     TOKEN_BLUEPRINT = token_blueprint
     POOL_BLUEPRINT = pool_blueprint
 
@@ -21,11 +22,12 @@ event NewPool:
 # this also needs to deploy the CDP contract per vault  
 @external
 def new_pool(collateral_assets: DynArray[address, pool.MAX_POSITIONS], name: String[25], symbol: String[5]) -> (address, address):
-    assert self.admin == msg.sender, "Only the admin of the factor can create pools"
     domain_712: String[50] = "Dream Finance"
     version_712: String[25] = "1"
-    liquidate_beneficiary: address = self.admin
+
     cdp_addr: address = create_from_blueprint(TOKEN_BLUEPRINT, name, symbol, currency.DECIMALS, domain_712, version_712)
-    pool_addr: address = create_from_blueprint(POOL_BLUEPRINT, cdp_addr, liquidate_beneficiary, collateral_assets, revert_on_failure=True, value=0)
+    pool_addr: address = create_from_blueprint(POOL_BLUEPRINT, cdp_addr, self.liquidate_beneficiary, collateral_assets)
+    extcall IERC20(cdp_addr).set_minter(pool_addr, True)
+
     log NewPool(pool_addr, cdp_addr)
     return (pool_addr, cdp_addr)
