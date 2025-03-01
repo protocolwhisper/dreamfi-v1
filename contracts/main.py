@@ -7,12 +7,12 @@ import subprocess
 
 # Load environment variables
 load_dotenv()
-PRIVATE_KEY = os.getenv('PRIVATE_KEY')
 
 def setup_environment(is_local: bool = True):
     network = 'https://sepolia.base.org'
     
     # Create account from private key
+    PRIVATE_KEY = os.getenv('PRIVATE_KEY')
     account = Account.from_key(PRIVATE_KEY)
     print(f"Using account: {account.address}")
     
@@ -43,32 +43,26 @@ def deploy_contracts(is_local: bool = True):
         pool_blueprint_contract = pool_blueprint.deploy_as_blueprint()
         print(f"Pool blueprint deployed at: {pool_blueprint_contract.address}")
         
-        # For token, use standard deployment and avoid blueprint
-        print("Deploying token contract...")
-        name = "CDP Token"
-        symbol = "CDP"
-        decimals = 18
-        name_eip712 = "Dream Finance" 
-        version_eip712 = "1"
-        
         # In Titanoboa, we pass constructor args directly to boa.load()
-        token_contract = boa.load("erc20.vy", 
-            name, symbol, decimals, name_eip712, version_eip712)
-        print(f"Token contract deployed at: {token_contract.address}")
+        print("Deploying token blueprint...")
+        token_blueprint = boa.load_partial('erc20.vy')
+        token_blueprint_contract = token_blueprint.deploy_as_blueprint()
+        print(f"Token blueprint deployed at: {token_blueprint_contract.address}")
         
         # Factory deployment follows the same pattern
         print("Deploying factory...")
         factory = boa.load("factory.vy", 
             account.address,
             pool_blueprint_contract.address, 
-            token_contract.address
+            token_blueprint_contract.address
         )
         print(f"Factory deployed at: {factory.address}")
         
         return {
             "pool_blueprint": pool_blueprint_contract,
-            "token": token_contract,
-            "factory": factory
+            "token_blueprint": token_blueprint_contract,
+            "factory": factory,
+            "account": account,
         }
     
     except Exception as e:

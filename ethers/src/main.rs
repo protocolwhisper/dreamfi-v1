@@ -37,6 +37,8 @@ async fn main() -> Result<()> {
     // Example: Calling view functions
     let admin_address = factory.admin().call().await?;
     println!("Factory Admin: {}", admin_address);
+
+    
     
     Ok(())
 } 
